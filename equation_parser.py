@@ -59,10 +59,12 @@ def parse_equations(equation_lines):
 
     return dependencies, parsed_equations
 
-def initialize_exogenous(equations, state={}, seed=0):
-    if seed is not None:
-        random.seed(seed)
+def print_equations(equations):
+    print("\nThe equations are:")
+    for i, eq in enumerate(equations):
+        print(f'{i+1} -> {eq}')
 
+def print_variabels(equations):
     # 1. Collect all symbols used in RHS expressions
     all_rhs_symbols = set()
     lhs_symbols = set()
@@ -75,22 +77,20 @@ def initialize_exogenous(equations, state={}, seed=0):
         all_rhs_symbols.update(rhs.free_symbols)
         lhs_symbols.add(lhs)
 
-    # 2. Identify variable names that are exogenous
-    known_names = set(state.keys())
+    # 2. Identify variable names that are exogenous/endogenous
+    endogenous_symbols = [s for s in lhs_symbols]
     exogenous_symbols = [
         s for s in all_rhs_symbols
-        if str(s) not in known_names and s not in lhs_symbols
+        if s not in lhs_symbols
     ]
-    # print(f'The exogenous variables are:')
-    # for ex_s in sorted([str(s) for s in exogenous_symbols]):
-    #     print(f'"{ex_s}" = ')
-
-    # 3. Initialize them with random values (e.g. between 0 and 1)
-    new_state = state.copy()
-    for sym in exogenous_symbols:
-        new_state[str(sym)] = random.uniform(0.1, 0.9)
-
-    return new_state
+    print(f'\nThe exogenous variables are:')
+    for i, ex_s in enumerate(sorted([str(s) for s in exogenous_symbols])):
+        print(f'{i+1} -> "{ex_s}"')
+    # print(exogenous_symbols)
+    print(f'\nThe endogenous variables are:')
+    for i, end_s in enumerate(sorted([str(s) for s in endogenous_symbols])):
+        print(f'{i+1} -> "{end_s}"')
+    # print(endogenous_symbols)
 
 def parse_conditional_assignment(line):
     match = re.match(r'"([^"]+)"\s*=\s*(.+?)\s+iff\s+(.+)', line.strip())
@@ -127,3 +127,29 @@ def handle_condition(expr_str, symbol_map):
         return And(expr1, expr2)
     else:
         return parse_expr(expr_str, local_dict=symbol_map)
+
+def initialize_variables(equations, state, seed=0):
+    random.seed(seed)
+
+    # 1. Collect all symbols
+    all_symbols = set()
+
+    for eq in equations:
+        if isinstance(eq, Eq):
+            lhs, rhs = eq.lhs, eq.rhs
+        else:
+            lhs, rhs = eq[0], eq[1]  # in case it's a tuple (lhs, rhs)
+        all_symbols.update(lhs.free_symbols)
+        all_symbols.update(rhs.free_symbols)
+
+    # 2. Identify variable names that are exogenous
+    known_names = set(state.keys())
+
+    # 3. Initialize them with random values (e.g. between 0 and 1)
+    new_state = state.copy()
+    for sym in all_symbols:
+        name = str(sym)
+        if name not in known_names:
+            new_state[name] = random.uniform(0.1, 0.5)
+
+    return new_state

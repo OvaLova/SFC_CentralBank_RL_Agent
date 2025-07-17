@@ -44,7 +44,7 @@ def visualize_dependency_graph(G, sccs, title="Dependency Graph", filename="depe
 
 def visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf"):
     # Map SCC indices to labels
-    label_map = {i: "\n".join(sorted(scc)) for i, scc in enumerate(sccs)}
+    label_map = {i: " | ".join(sorted(scc)) for i, scc in enumerate(sccs)}
     # Assign colors
     red_cmap = mcolors.LinearSegmentedColormap.from_list("reds", ["lightcoral", "darkred"])
     node_colors = []

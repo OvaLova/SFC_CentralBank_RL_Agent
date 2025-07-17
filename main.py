@@ -1,12 +1,13 @@
-from equation_parser import parse_equations, initialize_exogenous
+from equation_parser import parse_equations, print_variabels, print_equations
 from graph_builder import build_dependency_graph, build_condensation_graph, visualize_dependency_graph, visualize_condensation_graph
-from solve_model import solve_period
+from solve_model import solve_period, initialize_guess
 import pandas as pd
 import matplotlib.pyplot as plt
+from model_matrices import balance_sheet_map, state, build_matrix, check_matrix_consistency
 
 
 if __name__ == "__main__":
-    with open("equations.txt") as f:
+    with open("equations_eviews.txt") as f:
         lines = f.readlines()
 
     deps, eqs = parse_equations(lines)
@@ -17,41 +18,30 @@ if __name__ == "__main__":
     # visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf")
 
     ### Prints ###
-    # print("Strongly Connected Components:")
-    # for i, scc in enumerate(sccs):
-    #     print(f"SCC {i}: {scc}")
-    #
-    # print("\nCondensation Graph Nodes:")
-    # print(cond_graph.nodes())
-    #
-    # for i, eq in enumerate(eqs):
-    #     print(f'{i+1} -> {eq}')
+    # print_equations(eqs)
+    # print_variabels(eqs)
 
-    T = 0
+    T = 3
     history = pd.DataFrame()
     # Set initial values (includes lags and exogenous vars)
-    state = initialize_exogenous(eqs, {}, None)
+    state = state
     # Initial guess for nsolve
-    initial_guess = [1] * len(eqs)
+    initial_guess = initialize_guess(state, eqs)
 
     for t in range(T):
-        print(f"-> Solving for timestep {t}...")
+        balance_sheet = build_matrix(balance_sheet_map, state)
+        print(balance_sheet)
+        check_matrix_consistency(balance_sheet)
+        print(f"\n-> Solving for timestep {t}...")
         # Solve equations at time t
         while True:
             try:
                 solution = solve_period(eqs, state, initial_guess)
+                print("Done!")
                 break
             except ValueError as e:
                 print(e)
-                if t == 0:
-                    state = initialize_exogenous(eqs, {}, None)
-                else:
-                    new_state = initialize_exogenous(eqs, {}, None)
-                    for k, v in new_state.items():
-                        if "_-1" not in k:  # Don't overwrite lags
-                            state[k] = v
-                print(f"-> Solving for timestep {t} again...")
-                continue
+                raise ValueError
         # Store solution
         row = {"t": t}
         row.update(solution)
@@ -59,16 +49,12 @@ if __name__ == "__main__":
         # Update state: copy solution and prepare lagged versions
         state.update(solution)
         for var in solution:
-            state[f"{var}_-1"] = solution[var]
+            lagged_key = f"{var}_-1"
+            if lagged_key in state:
+                state[lagged_key] = solution[var]
         # Update guess for next period
         initial_guess = list(solution.values())
 
     # Save history to CSV
     history.to_csv("history.csv", index=False)
 
-    plt.plot(history["t"], history["y"], marker='o')
-    plt.title("Real output over time")
-    plt.xlabel("t")
-    plt.ylabel("y")
-    plt.grid(True)
-    plt.show()
