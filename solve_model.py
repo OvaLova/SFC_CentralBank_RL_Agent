@@ -9,19 +9,6 @@ def substitute_knowns(eq, knowns, endogenous_vars):
     eq_subs = eq.subs(safe_knowns)
     return eq_subs
 
-# def solve_period(equations, knowns, guess):
-#     # Substitute lags and exogenous into RHS
-#     vars_to_solve = [eq.lhs for eq in equations]
-#     endogenous_var_names = {str(v) for v in vars_to_solve}
-#     substituted_eqs = [substitute_knowns(eq, knowns, endogenous_var_names) for eq in equations]
-#     print("\n\n\n")
-#     print_equations(substituted_eqs)
-    
-#     # Solve numerically
-#     sol = nsolve(substituted_eqs, vars_to_solve, guess, tol=1e-6)
-    
-#     return dict(zip([str(v) for v in vars_to_solve], sol))
-
 def solve_period(equations, knowns, guess):
     # Variables to solve for
     vars_to_solve = [eq.lhs for eq in equations]
@@ -80,3 +67,17 @@ def initialize_guess(state, equations):
             initial_guess.append(1.0)
     
     return initial_guess
+
+# SYMPY SOLVER (defect)
+# def solve_period(equations, knowns, guess):
+#     # Substitute lags and exogenous into RHS
+#     vars_to_solve = [eq.lhs for eq in equations]
+#     endogenous_var_names = {str(v) for v in vars_to_solve}
+#     substituted_eqs = [substitute_knowns(eq, knowns, endogenous_var_names) for eq in equations]
+#     print("\n\n\n")
+#     print_equations(substituted_eqs)
+    
+#     # Solve numerically
+#     sol = nsolve(substituted_eqs, vars_to_solve, guess, tol=1e-6)
+    
+#     return dict(zip([str(v) for v in vars_to_solve], sol))

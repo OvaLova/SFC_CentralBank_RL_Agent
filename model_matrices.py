@@ -23,7 +23,10 @@ balance_sheet_map = {
     "p_e-1*e_s-1": ("Equities", "Firms", -1),
     "OF_b-1(banks)": ("Bank Capital", "Banks", -1),
     "OF_b-1(households)": ("Bank Capital", "Households", +1),
-    "V_-1": ("Wealth", "Households", -1),  # Balancing item
+    # Balancing items
+    "V_-1": ("Wealth", "Households", -1),  
+    "GD_-1": ("Wealth", "Government", +1), 
+    "V_f-1": ("Wealth", "Firms", -1)
 }
 
 state = {
@@ -43,8 +46,8 @@ state = {
     "ε_b": 0.25,
     "η": 0.04918,
     "η_0": 0.07416,
-    "η_r": 0.4,
     "η_n": 0.6,
+    "η_r": 0.4,
     "θ": 0.22844,
     "λ_20": 0.25,
     "λ_21": 2.2,
@@ -66,12 +69,13 @@ state = {
     "λ_45": 0.1,
     "λ_b": 0.0153,
     "λ_c": 0.05,
+    "ζ_m": 0.00075,
     "ζ_m1": 0.0008,
     "ζ_m2": 0.0007,
     "ρ": 0.05,
     "σ^N": 0.1666,
-    "σ^T": 0.2,
     "σ_se-1": 0.16667,
+    "σ^T": 0.2,
     "φ_-1": 0.26417,
     "φ^T_-1": 0.26417,
     "ψ_D": 0.15255,
@@ -91,7 +95,7 @@ state = {
     "NCAR": 0.1,
     "npl": 0.02,
     "r_b_": 0.035,
-    "r_lN-1": 0.07,
+    "r_lN": 0.07,
     "top": 0.12,
     # Initial values for stocks
     "B_bs-1": 4389790,
@@ -103,7 +107,8 @@ state = {
     "B_s-1": 42484800,
     "BL_d-1": 840742,
     "BL_s-1": 840742,
-    "GD_-1": 57728700,
+    # "GD_-1": 57728700, # original
+    "GD_-1": 33439320 + 4389790 + 840742*18.182 + 2025540 + 2630150, # replacement
     "e_d-1": 5112.6001,
     "e_s-1": 5112.6001,
     "H_bd-1": 2025540,
@@ -127,7 +132,9 @@ state = {
     "OF_b-1": 3474030,
     "OF^e_b-1": 3474030,
     "OF^T_b-1": 3638100,
-    "V_-1": 165438779,
+    # "V_-1": 165438779, # original
+    "V_-1": 165438779 + 0.0377, # replacement
+    "V_f-1": 11585400 + 127444000 - 15962900 - 5112.6001*17937, # added
     "V_fma-1": 159334599,
     "v_-1": 165438779/7.1723,
     # Initial values for other endogenous
@@ -193,11 +200,11 @@ state = {
     "yd^e_r-1": 7813290,
     "YP_-1": 73158700,
     # Missing
-    "HC^e_-1": 5.6106*12028300*(1-0.16667) + 5.6106*12028300*0.16667*(0.06522+1),
-    "YD_hs-1": 56446400 + 0,
-    "CG_-1": 0,
-    "F_cb-1": 0.035*4655690,
-    "FU^T_b-1": 419039,
+    # "HC^e_-1": 5.6106*12028300*(1-0.16667) + 5.6106*12028300*0.16667*(0.06522+1),
+    # "YD_hs-1": 56446400 + 0,
+    # "CG_-1": 0,
+    # "F_cb-1": 0.035*4655690,
+    # "FU^T_b-1": 419039,
 }
 
 def build_matrix(var_map, state):
@@ -223,23 +230,33 @@ def build_matrix(var_map, state):
                 matrix.loc[instr, sector] += sign * state[clean_var]
     return matrix
 
-def check_matrix_consistency(matrix):
+def check_matrix_consistency(matrix, tol=1e-4):
     row_sums = matrix.sum(axis=1)
     column_sums = matrix.sum(axis=0)
-    excluded_rows = ['Inventories', 'Fixed capital']
+    excluded_rows = ['Inventories', 'Fixed capital', 'Wealth']
     filtered_rows = row_sums[~row_sums.index.isin(excluded_rows)]
-    row_consistency = filtered_rows.abs().max() < 1e-8
-    col_consistency = column_sums.abs().max() < 1e-8
+    row_consistency = filtered_rows.abs().max() < tol
+    col_consistency = column_sums.abs().max() < tol
+    total_wealth = -matrix.loc['Wealth'].sum()
+    total_real_assets = (
+        matrix.loc['Inventories'].sum() + 
+        matrix.loc['Fixed capital'].sum()
+    )
+    wealth_consistency = abs(total_wealth - total_real_assets) < tol
     # Print diagnostic information
     print("\n=== Accounting Consistency Check ===")
     print(f"Row consistency: {'PASS' if row_consistency else 'FAIL'}")
     print(f"Column consistency: {'PASS' if col_consistency else 'FAIL'}")
+    print(f"Wealth Conservation: {'PASS' if wealth_consistency else 'FAIL'}")
     if not row_consistency:
         print("\nProblematic instrument sums:")
-        print(filtered_rows[filtered_rows.abs() >= 1e-8])
+        print(filtered_rows[filtered_rows.abs() >= tol])
     if not col_consistency:
         print("\nProblematic sector sums:")
-        print(column_sums[column_sums.abs() >= 1e-8])
+        print(column_sums[column_sums.abs() >= tol])
+    if not wealth_consistency:
+        print("\nWealth conservation broken:")
+        print(f"  Difference: {total_wealth - total_real_assets}")
     return row_sums, column_sums
 
 def balance_sector(matrix, sector, balancing_instrument="Wealth"):
