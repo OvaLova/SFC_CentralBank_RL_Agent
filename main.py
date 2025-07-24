@@ -4,6 +4,7 @@ from solve_model import solve_period, initialize_guess
 import pandas as pd
 import matplotlib.pyplot as plt
 from model_matrices import balance_sheet_map, state, build_matrix, check_matrix_consistency
+import random as rd
 
 
 if __name__ == "__main__":
@@ -12,14 +13,14 @@ if __name__ == "__main__":
 
     deps, eqs = parse_equations(lines)
 
-    G = build_dependency_graph(deps)
-    cond_graph, sccs = build_condensation_graph(G)
-    visualize_dependency_graph(G, sccs, title="Variable Dependency Graph", filename="dependency_graph.pdf")
-    visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf")
+    # G = build_dependency_graph(deps)
+    # cond_graph, sccs = build_condensation_graph(G)
+    # visualize_dependency_graph(G, sccs, title="Variable Dependency Graph", filename="dependency_graph.pdf")
+    # visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf")
 
     ### Prints ###
-    print_equations(eqs)
-    print_variabels(eqs)
+    # print_equations(eqs)
+    # print_variabels(eqs)
 
     T = 100
     history = pd.DataFrame()
@@ -51,6 +52,9 @@ if __name__ == "__main__":
                 lagged_key = f"{var}-1"
                 if lagged_key in state:
                     state[lagged_key] = solution[var]
+        new_rate = rd.uniform(state["r_b_"], rd.choice([state["r_b_"] + 0.005, state["r_b_"] - 0.005]))
+        print(f"Agent selected r_b_ = {new_rate}")
+        state["r_b_"] = new_rate
 
         # Update guess for next period
         initial_guess = list(solution.values())
