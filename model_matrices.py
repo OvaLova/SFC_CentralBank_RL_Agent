@@ -230,7 +230,7 @@ def build_matrix(var_map, state):
                 matrix.loc[instr, sector] += sign * state[clean_var]
     return matrix
 
-def check_matrix_consistency(matrix, tol=1e-4):
+def check_matrix_consistency(matrix, tol=1e-4, verbose=False):
     row_sums = matrix.sum(axis=1)
     column_sums = matrix.sum(axis=0)
     excluded_rows = ['Inventories', 'Fixed capital', 'Wealth']
@@ -244,20 +244,21 @@ def check_matrix_consistency(matrix, tol=1e-4):
     )
     wealth_consistency = abs(total_wealth - total_real_assets) < tol
     # Print diagnostic information
-    print("\n=== Accounting Consistency Check ===")
-    print(f"Row consistency: {'PASS' if row_consistency else 'FAIL'}")
-    print(f"Column consistency: {'PASS' if col_consistency else 'FAIL'}")
-    print(f"Wealth Conservation: {'PASS' if wealth_consistency else 'FAIL'}")
-    if not row_consistency:
-        print("\nProblematic instrument sums:")
-        print(filtered_rows[filtered_rows.abs() >= tol])
-    if not col_consistency:
-        print("\nProblematic sector sums:")
-        print(column_sums[column_sums.abs() >= tol])
-    if not wealth_consistency:
-        print("\nWealth conservation broken:")
-        print(f"  Difference: {total_wealth - total_real_assets}")
-    return row_sums, column_sums
+    if verbose:
+        print("\n=== Accounting Consistency Check ===")
+        print(f"Row consistency: {'PASS' if row_consistency else 'FAIL'}")
+        print(f"Column consistency: {'PASS' if col_consistency else 'FAIL'}")
+        print(f"Wealth Conservation: {'PASS' if wealth_consistency else 'FAIL'}")
+        if not row_consistency:
+            print("Problematic instrument sums:")
+            print(filtered_rows[filtered_rows.abs() >= tol])
+        if not col_consistency:
+            print("Problematic sector sums:")
+            print(column_sums[column_sums.abs() >= tol])
+        if not wealth_consistency:
+            print("Wealth conservation broken:")
+            print(f"  Difference: {total_wealth - total_real_assets}")
+    return row_consistency and col_consistency and wealth_consistency
 
 def balance_sector(matrix, sector, balancing_instrument="Wealth"):
     imbalance = matrix[sector].sum()

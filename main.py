@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from model_matrices import balance_sheet_map, state, build_matrix, check_matrix_consistency
 import random as rd
+from gym_environment import pi_target, threshold
 
 
 if __name__ == "__main__":
@@ -26,13 +27,14 @@ if __name__ == "__main__":
     history = pd.DataFrame()
     # Set initial values (includes lags and exogenous vars)
     state = state
+    print(f'Initial interest rate is: {state["r_b_"]}')
     # Initial guess for nsolve
     initial_guess = initialize_guess(state, eqs)
 
     for t in range(T):
-        balance_sheet = build_matrix(balance_sheet_map, state)
-        print(balance_sheet)
-        check_matrix_consistency(balance_sheet)
+        # balance_sheet = build_matrix(balance_sheet_map, state)
+        # print(balance_sheet)
+        # check_matrix_consistency(balance_sheet, verbose=True)
         # print(state)
         print(f"\n-> Solving for timestep {t}...")
         # Solve equations at time t
@@ -52,9 +54,11 @@ if __name__ == "__main__":
                 lagged_key = f"{var}-1"
                 if lagged_key in state:
                     state[lagged_key] = solution[var]
-        new_rate = rd.uniform(state["r_b_"], rd.choice([state["r_b_"] + 0.005, state["r_b_"] - 0.005]))
-        print(f"Agent selected r_b_ = {new_rate}")
+        # new_rate = rd.choice([state["r_b_"] + 0.005, state["r_b_"] - 0.005])    # random walk
+        # new_rate = max(0.0, state["r_b_"] - 0.005)    # decrease max
+        new_rate = min(0.15, state["r_b_"] + 0.005)     # increase max
         state["r_b_"] = new_rate
+        print(f'Agent selected r_b_ = {state["r_b_"]}')
 
         # Update guess for next period
         initial_guess = list(solution.values())
@@ -62,3 +66,31 @@ if __name__ == "__main__":
     # Save history to CSV
     history.to_csv("history.csv", index=False)
 
+    plt.figure(figsize=(12, 6))
+    history = pd.read_csv("history.csv")
+    
+    # Plot inflation and target
+    plt.subplot(2, 1, 1)
+    plt.plot(history['t'], history['π'], label='Actual Inflation', color='blue')
+    plt.axhline(y=pi_target, color='r', linestyle='--', label='Target Inflation')
+    plt.fill_between(history['t'], 
+                    pi_target + threshold, 
+                    pi_target - threshold, 
+                    color='green', alpha=0.1, label=f'Target Zone (±{threshold:.3%})')
+    plt.ylabel('Inflation Rate (%)')
+    plt.title('Inflation Control Performance')
+    plt.legend()
+    plt.grid(True)
+
+    # Plot interest rates
+    plt.subplot(2, 1, 2)
+    plt.plot(history['t'], history['r_b'], label='Policy Rate', color='orange')
+    plt.ylabel('Interest Rate (%)')
+    plt.xlabel('Time Steps')
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+    
