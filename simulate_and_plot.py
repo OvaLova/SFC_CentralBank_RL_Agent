@@ -9,7 +9,7 @@ from model_matrices import balance_sheet_map, state
 print(f"========== SIMULATION of: {model_name} ==========")
 # Initialize environment (single instance for simulation)
 base_env = SFCEnv(
-    T=100,
+    T=200,
     eq_file="equations_zezza.txt",
     init_state=state,
     balance_sheet_map=balance_sheet_map,
@@ -28,6 +28,7 @@ model = PPO.load(model_name)
 inflation_rates = []
 interest_rates = []
 policy_actions = []
+growth = []
 timesteps = list(range(base_env.T))
 
 # Run simulation
@@ -41,6 +42,7 @@ for step in range(base_env.T):
     current_info = infos[0]  # Get info dict for first env
     current_inflation = current_info.get("π", 0)
     current_interest = current_info.get("r_b_", 0)
+    current_growth = current_info.get("gdp_growth", 0)
     # Convert action to integer index
     action_idx = int(action[0])  # Convert numpy array to integer
     action_value = base_env.action_value_ranges["r_b_"][action_idx]
@@ -48,33 +50,39 @@ for step in range(base_env.T):
     inflation_rates.append(current_inflation)
     interest_rates.append(current_interest)
     policy_actions.append(action_value)
+    growth.append(current_growth)
 
 # Plotting
-plt.figure(figsize=(12, 9))
+plt.figure(figsize=(12, 12))
 
 # Plot inflation and target
-plt.subplot(3, 1, 1)
+plt.subplot(4, 1, 1)
 plt.plot(timesteps, inflation_rates, label='Actual Inflation', color='blue')
 plt.axhline(y=pi_target, color='r', linestyle='--', label='Target Inflation')
 plt.fill_between(timesteps, 
                  pi_target - threshold, 
                  pi_target + threshold, 
                  color='green', alpha=0.1, label=f'Target Zone (±{threshold:.3%})')
-plt.ylabel('Inflation Rate (%)')
-plt.title('Inflation Control Performance')
+plt.ylabel('Inflation Rate')
+plt.legend()
+plt.grid(True)
+
+# Plot growth
+plt.subplot(4, 1, 2)
+plt.plot(timesteps, growth, label='GDP Growth', color='purple')
+plt.ylabel('GDP')
 plt.legend()
 plt.grid(True)
 
 # Plot interest rates
-plt.subplot(3, 1, 2)
+plt.subplot(4, 1, 3)
 plt.plot(timesteps, interest_rates, label='Policy Rate', color='red')
-plt.ylabel('Interest Rate (%)')
-plt.xlabel('Time Steps')
+plt.ylabel('Interest Rate')
 plt.legend()
 plt.grid(True)
 
 # Plot policy actions
-plt.subplot(3, 1, 3)
+plt.subplot(4, 1, 4)
 plt.step(timesteps, policy_actions, label='Policy Action', color='orange', where='post')
 plt.scatter(timesteps, policy_actions, 
             color='darkorange', 

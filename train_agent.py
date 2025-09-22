@@ -9,7 +9,7 @@ from stable_baselines3.common.monitor import Monitor
 T = 100
 n_envs = 8
 n_steps=int(T/4)
-total_timesteps=T*200
+total_timesteps=T*100
 rollout_size = n_steps * n_envs
 batch_size=int(rollout_size/100)
 verbose = 1
@@ -18,7 +18,7 @@ if multiprocess:
     process = "multiprocess"
 else:
     process = "singleprocess"
-loss = "quadratic"
+loss = "piecewise"
 model_name = f"PPO_optimal_interest_rate_policy_{process}_{loss}"
 
 def train(multiprocess=False):

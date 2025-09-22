@@ -1,6 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+import random as rd
 import pandas as pd
 from solve_model import solve_period, initialize_guess
 from graph_builder import build_dependency_graph, build_condensation_graph, visualize_dependency_graph, visualize_condensation_graph
@@ -13,7 +14,8 @@ pi_target = 0.0075
 u_target = 0.85    
 # Weights for penalty (λ values)
 lambda_pi = 1.0
-lambda_u = 0.0
+# lambda_u = 0.25
+# lambda_y = 1.0
 lambda_vol = 1.0
 # Allowed deviation
 threshold = 0.0025
@@ -26,7 +28,6 @@ class SFCEnv(gym.Env):
         self.T = T
         self.t = 0
         self.balance_sheet_map = balance_sheet_map
-        # self.history = pd.DataFrame()
         self.loss = loss
 
         # Load and parse equations
@@ -56,7 +57,10 @@ class SFCEnv(gym.Env):
             "r_b_": action_deltas
         }
         self.action_space = spaces.MultiDiscrete([len(self.action_value_ranges[var]) for var in self.action_vars])
-        self.observation_vars = list(self.state.keys()) 
+        all_vars = list(self.state.keys())
+        params_to_exclude = [var for var in self.state 
+                        if not var.endswith('_-1') and not var.endswith('-1')]  
+        self.observation_vars = [var for var in all_vars if var not in params_to_exclude]
         self.observation_space = spaces.Box(
             low=-1e2, high=1e12, shape=(len(self.observation_vars),), dtype=np.float32
         )
@@ -65,22 +69,23 @@ class SFCEnv(gym.Env):
         super().reset(seed=seed)
         if self.verbose:
             print("============= Model is being reset... =============")
-        # self.history.to_csv("history.csv", index=False)
         self.t = 0
-        # self.history = pd.DataFrame()
         self.state = self.init_state.copy()
         self.initial_guess = initialize_guess(self.state, self.eqs)
         return self._get_obs(), {}
 
     def step(self, action):
-        # balance_sheet = build_matrix(self.balance_sheet_map, self.state)
-        # passed = check_matrix_consistency(balance_sheet, self.verbose)
-        # if self.verbose:
-        #     print(balance_sheet)
-        #     if passed:
-        #         print("=== PASSED ===")
-        #     else:
-        #         print("=== FAILED ===")
+        balance_sheet = build_matrix(self.balance_sheet_map, self.state)
+        passed, differences = check_matrix_consistency(balance_sheet, verbose=self.verbose)
+        if self.verbose:
+            print(balance_sheet)
+            if passed:
+                print("=== PASSED ===")
+            else:
+                print("=== FAILED ===")
+
+        # Apply random shocks to non-lagged variables before solving
+        # self._apply_shocks()
 
         # Solve model
         if self.verbose:
@@ -96,7 +101,7 @@ class SFCEnv(gym.Env):
 
         # Update state
         prev_rate = self.state["r_b_"]
-        self.state.update(solution)
+        prev_y = self.state["y_-1"]
         for var in solution:
             lagged_key = f"{var}_-1"
             if lagged_key in self.state:
@@ -119,52 +124,56 @@ class SFCEnv(gym.Env):
         # Store result
         row = {"t": self.t}
         row.update(solution)
-        # self.history = pd.concat([self.history, pd.DataFrame([row])], ignore_index=True)
 
         # Update guess
         self.initial_guess = list(solution.values())
         self.t += 1
 
         # Define reward (e.g., stable inflation or GDP growth)
-        reward = self._compute_reward(prev_rate)
+        reward = self._compute_reward(prev_rate, prev_y)
 
         truncated = self.t >= self.T
         terminated = False  # No terminal state
         info = {
             "π": self.state["π_-1"],
             "u": self.state["u_-1"],
-            "r_b_": self.state["r_b_"]
+            "r_b_": self.state["r_b_"],
+            "gdp_growth": self.state.get("y_-1", 0.0) / prev_y
         }
         return self._get_obs(), reward, terminated, truncated, info
 
     def _get_obs(self):
         return np.array([self.state[k] for k in self.observation_vars], dtype=np.float32)
 
-    def _compute_reward(self, prev_rate):
+    def _compute_reward(self, prev_rate, prev_y):
         # Extract key indicators from state
         inflation = self.state.get("π_-1", 0.0)
         capacity_util = self.state.get("u_-1", 0.0)
+        gdp_growth = self.state.get("y_-1", 0.0) / prev_y
 
         if self.loss == "quadratic":
             # Quadratic penalty for deviation (penalizes any deviation)
             penalty = lambda_pi * (inflation - pi_target)**2 
             # + lambda_u * (capacity_util - u_target)**2
+            # - lambda_y * gdp_growth
         elif self.loss == "hinge":
             # Hinge penalty for deviation (penalizes only beyond threshold)
             inflation_loss = max(0, abs(inflation - pi_target) - threshold)
             # util_loss = max(0, abs(capacity_util - u_target) - threshold)
             penalty = lambda_pi * inflation_loss 
             # + lambda_u * util_loss    
+            # - lambda_y * gdp_growth
         elif self.loss == "piecewise":
             # Hinge penalty for deviation (rewards for target zone, else penalizes)
             if (abs(inflation - pi_target) < threshold 
                 # and abs(capacity_util - u_target) < threshold
                 ):
-                penalty = -1.0  # Bonus for being in target zone
+                penalty = -1.0   # Bonus for being in target zone
+                # - lambda_y * gdp_growth
             else:
-                # penalty = 0.0  # No penalty if astray
                 penalty = lambda_pi * (inflation - pi_target)**2 
                 # + lambda_u * (capacity_util - u_target)**2
+                # - lambda_y * gdp_growth
 
         # Penalize large rate changes (smoothing)
         new_rate = self.state["r_b_"]
@@ -175,3 +184,16 @@ class SFCEnv(gym.Env):
         if self.verbose:
             print(f"The reward is: {reward}")
         return reward
+    
+    def _apply_shocks(self):
+        # Apply random shocks to non-lagged variables before solving
+        shockable_vars = [var for var in self.state 
+                     if not var.endswith('_-1') and not var.endswith('-1') 
+                     and var != 'r_b_' and not var.startswith('λ')]  
+        shockable_vars = rd.sample(shockable_vars, 5)
+        for var in shockable_vars:
+            shock = np.random.normal(scale=0.01)
+            if self.verbose:
+                print(f"the shock to {var} is: {shock*100}%")
+            shocked_value = self.state[var] * (1 + shock)
+            self.state[var] = np.clip(shocked_value, 0, 1)

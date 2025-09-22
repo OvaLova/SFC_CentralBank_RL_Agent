@@ -3,3 +3,5 @@
 *.csv
 *.pkl
 *.zip
+plots/
+ppo_logs/

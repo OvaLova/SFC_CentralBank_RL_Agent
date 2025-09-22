@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+import numpy as np
 
 
 balance_sheet_map = {
@@ -198,13 +199,7 @@ state = {
     "YD_r-1": 56446400,
     "yd_r-1": 7813270,
     "yd^e_r-1": 7813290,
-    "YP_-1": 73158700,
-    # Missing
-    # "HC^e_-1": 5.6106*12028300*(1-0.16667) + 5.6106*12028300*0.16667*(0.06522+1),
-    # "YD_hs-1": 56446400 + 0,
-    # "CG_-1": 0,
-    # "F_cb-1": 0.035*4655690,
-    # "FU^T_b-1": 419039,
+    "YP_-1": 73158700
 }
 
 def build_matrix(var_map, state):
@@ -242,7 +237,8 @@ def check_matrix_consistency(matrix, tol=1e-4, verbose=False):
         matrix.loc['Inventories'].sum() + 
         matrix.loc['Fixed capital'].sum()
     )
-    wealth_consistency = abs(total_wealth - total_real_assets) < tol
+    wealth_discrepancy = total_wealth - total_real_assets
+    wealth_consistency = abs(wealth_discrepancy) < tol
     # Print diagnostic information
     if verbose:
         print("\n=== Accounting Consistency Check ===")
@@ -257,10 +253,11 @@ def check_matrix_consistency(matrix, tol=1e-4, verbose=False):
             print(column_sums[column_sums.abs() >= tol])
         if not wealth_consistency:
             print("Wealth conservation broken:")
-            print(f"  Difference: {total_wealth - total_real_assets}")
-    return row_consistency and col_consistency and wealth_consistency
-
-def balance_sector(matrix, sector, balancing_instrument="Wealth"):
-    imbalance = matrix[sector].sum()
-    matrix.loc[balancing_instrument, sector] -= imbalance
-
+            print(f"  Difference: {wealth_discrepancy}")
+    result = row_consistency and col_consistency and wealth_consistency
+    differences = {
+        'row_differences': filtered_rows,
+        'column_differences': column_sums,
+        'wealth_discrepancy': wealth_discrepancy,
+    }
+    return result, differences
