@@ -13,29 +13,34 @@ def _apply_shocks():
     # Apply random shocks to non-lagged variables before solving
     shockable_vars = [var for var in state 
                     if not var.endswith('_-1') and not var.endswith('-1') 
-                    and var != 'r_b_' and not var.startswith('λ')]  
+                    and var != 'r_b_' and not var.startswith('λ')] # could shock lambdas also tho
+    # shockable_vars = ["Ω_0", "gr_g", "θ", "α_1", "α_2"] # variables shocked in the book
     shockable_vars = rd.sample(shockable_vars, 5)
     for var in shockable_vars:
-        shock = np.random.normal(scale=0.01)
+        shock = np.clip(np.random.normal(scale=0.02), -0.1, 0.1)
         print(f"the shock to {var} is: {shock*100}%")
-        shocked_value = state[var] * (1 + shock)
-        state[var] = np.clip(shocked_value, 0, 1)
+        sign = np.sign(state[var])
+        mag  = max(abs(state[var]), 1e-4)  # avoid zero trap
+        shocked_value = mag * (1 + shock)
+        shocked_value = np.clip(shocked_value, 0.0, 1.0)
+        state[var] = sign * shocked_value
 
 
+# Testing the model under different policies and conditions => trajectories
 if __name__ == "__main__":
     with open("equations_zezza.txt") as f:
         lines = f.readlines()
 
     deps, eqs = parse_equations(lines)
 
-    # G = build_dependency_graph(deps)
-    # cond_graph, sccs = build_condensation_graph(G)
-    # visualize_dependency_graph(G, sccs, title="Variable Dependency Graph", filename="dependency_graph.pdf")
-    # visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf")
+    G = build_dependency_graph(deps)
+    cond_graph, sccs = build_condensation_graph(G)
+    visualize_dependency_graph(G, sccs, title="Variable Dependency Graph", filename="dependency_graph.pdf")
+    visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", filename="condensation_graph.pdf")
 
     ### Prints ###
-    # print_equations(eqs)
-    # print_variabels(eqs)
+    print_equations(eqs)
+    print_variabels(eqs)
 
     T = 200
     history = pd.DataFrame()
@@ -46,18 +51,21 @@ if __name__ == "__main__":
     initial_guess = initialize_guess(state, eqs)
 
     for t in range(T):
-        # balance_sheet = build_matrix(balance_sheet_map, state)
-        # print(balance_sheet)
-        # check_matrix_consistency(balance_sheet, verbose=True)
+        timestep = t+1
+        balance_sheet = build_matrix(balance_sheet_map, state)
+        print(balance_sheet)
+        check_matrix_consistency(balance_sheet, verbose=True)
         # print(state)
-        print(f"\n-> Solving for timestep {t}...")
+        print(f"\n-> Solving for timestep {timestep}...")
         # Solve equations at time t
         solution = solve_period(eqs, state, initial_guess)
         print("Done!")
+
         # Store solution
-        row = {"t": t}
+        row = {"t": timestep}
         row.update(solution)
         history = pd.concat([history, pd.DataFrame([row])], ignore_index=True)
+
         # Update state: copy solution and prepare lagged versions
         _apply_shocks()
         for var in solution:
@@ -68,18 +76,23 @@ if __name__ == "__main__":
                 lagged_key = f"{var}-1"
                 if lagged_key in state:
                     state[lagged_key] = solution[var]
-        # Policy shocks
-        # if t == 50:
-        #     new_rate = state["r_b_"] + 0.01     # increase
+
+        ### Policy one-time shocks
+        # if timestep == 50:
+        #     # new_rate = state["r_b_"] + 0.01     # increase
         #     # new_rate = state["r_b_"] - 0.01     # decrease
         #     state["r_b_"] = new_rate
-        # Policy simulations
-        # new_rate = min(0.08, state["r_b_"] + 0.005)     # increase max
-        # new_rate = max(0.0, state["r_b_"] - 0.005)    # decrease max
-        new_rate = rd.choice([state["r_b_"] + 0.005, state["r_b_"] - 0.005])    # random walk
-        new_rate = np.clip(new_rate, 0.0, 0.15)
-        state["r_b_"] = new_rate
-        print(f'Agent selected r_b_ = {state["r_b_"]}')
+
+        ### Policy simulations
+        # Only increase/decrease
+        # new_rate = min(0.08, state["r_b_"] + 0.005)     # only increase 
+        # new_rate = max(0.0, state["r_b_"] - 0.005)    # only decrease 
+        # Random walk
+        # new_rate = rd.choice([state["r_b_"] + 0.005, state["r_b_"] - 0.005])    # random walk
+        # new_rate = np.clip(new_rate, 0.0, 0.15)
+        # state["r_b_"] = new_rate
+
+        # print(f'Agent selected r_b_ = {state["r_b_"]}')
 
         # Update guess for next period
         initial_guess = list(solution.values())

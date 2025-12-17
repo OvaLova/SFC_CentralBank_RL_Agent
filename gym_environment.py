@@ -11,14 +11,15 @@ from equation_parser import parse_equations, print_variabels, print_equations
 
 # Policy targets
 pi_target = 0.0075  
-u_target = 0.85    
+# u_target = 1   
 # Weights for penalty (λ values)
 lambda_pi = 1.0
-# lambda_u = 0.25
-# lambda_y = 1.0
+# lambda_u = 0.5
+# lambda_y = 0.25
 lambda_vol = 1.0
 # Allowed deviation
-threshold = 0.0025
+threshold_pi = 0.0025
+# threshold_u = 0.05
 
 
 class SFCEnv(gym.Env):
@@ -58,9 +59,12 @@ class SFCEnv(gym.Env):
         }
         self.action_space = spaces.MultiDiscrete([len(self.action_value_ranges[var]) for var in self.action_vars])
         all_vars = list(self.state.keys())
-        params_to_exclude = [var for var in self.state 
-                        if not var.endswith('_-1') and not var.endswith('-1')]  
-        self.observation_vars = [var for var in all_vars if var not in params_to_exclude]
+        vars_to_exculde = [var for var in self.state 
+                        if not var.endswith('_-1') and not var.endswith('-1')    # exclude parameters
+                        and '^T' not in var    # exclude targets
+                        and '^e' not in var    # exclude expectations
+                        ]  
+        self.observation_vars = [var for var in all_vars if var not in vars_to_exculde]
         self.observation_space = spaces.Box(
             low=-1e2, high=1e12, shape=(len(self.observation_vars),), dtype=np.float32
         )
@@ -84,7 +88,7 @@ class SFCEnv(gym.Env):
             else:
                 print("=== FAILED ===")
 
-        # Apply random shocks to non-lagged variables before solving
+        # Apply random shocks to non-lagged variables before solving (introduce stochasticity)
         # self._apply_shocks()
 
         # Solve model
@@ -154,19 +158,19 @@ class SFCEnv(gym.Env):
         if self.loss == "quadratic":
             # Quadratic penalty for deviation (penalizes any deviation)
             penalty = lambda_pi * (inflation - pi_target)**2 
-            # + lambda_u * (capacity_util - u_target)**2
-            # - lambda_y * gdp_growth
+            # penalty = penalty + lambda_u * (capacity_util - u_target)**2
+            # penalty = penalty - lambda_y * gdp_growth
         elif self.loss == "hinge":
             # Hinge penalty for deviation (penalizes only beyond threshold)
-            inflation_loss = max(0, abs(inflation - pi_target) - threshold)
-            # util_loss = max(0, abs(capacity_util - u_target) - threshold)
+            inflation_loss = max(0, abs(inflation - pi_target) - threshold_pi)
+            # util_loss = max(0, abs(capacity_util - u_target) - threshold_u)
             penalty = lambda_pi * inflation_loss 
-            # + lambda_u * util_loss    
-            # - lambda_y * gdp_growth
+            # penalty = penalty + lambda_u * util_loss    
+            # penalty = penalty - lambda_y * gdp_growth
         elif self.loss == "piecewise":
             # Hinge penalty for deviation (rewards for target zone, else penalizes)
-            if (abs(inflation - pi_target) < threshold 
-                # and abs(capacity_util - u_target) < threshold
+            if (abs(inflation - pi_target) < threshold_pi 
+                # and abs(capacity_util - u_target) < threshold_u
                 ):
                 penalty = -1.0   # Bonus for being in target zone
                 # - lambda_y * gdp_growth
@@ -189,11 +193,15 @@ class SFCEnv(gym.Env):
         # Apply random shocks to non-lagged variables before solving
         shockable_vars = [var for var in self.state 
                      if not var.endswith('_-1') and not var.endswith('-1') 
-                     and var != 'r_b_' and not var.startswith('λ')]  
+                     and var != 'r_b_' and not var.startswith('λ')] # could shock lambdas also tho
+        # shockable_vars = ["Ω_0", "gr_g", "θ", "α_1", "α_2"] # variables shocked in the book
         shockable_vars = rd.sample(shockable_vars, 5)
         for var in shockable_vars:
-            shock = np.random.normal(scale=0.01)
+            shock = np.clip(np.random.normal(scale=0.02), -0.1, 0.1)
             if self.verbose:
                 print(f"the shock to {var} is: {shock*100}%")
-            shocked_value = self.state[var] * (1 + shock)
-            self.state[var] = np.clip(shocked_value, 0, 1)
+            sign = np.sign(self.state[var])
+            mag  = max(abs(self.state[var]), 1e-4)  # avoid zero trap
+            shocked_value = mag * (1 + shock)
+            shocked_value = np.clip(shocked_value, 0.0, 1.0)
+            self.state[var] = sign * shocked_value

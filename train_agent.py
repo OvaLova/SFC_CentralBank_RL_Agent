@@ -19,7 +19,7 @@ if multiprocess:
 else:
     process = "singleprocess"
 loss = "piecewise"
-model_name = f"PPO_optimal_interest_rate_policy_{process}_{loss}"
+model_name = f"OptimalPolicy_{loss}"
 
 def train(multiprocess=False):
     base_env = SFCEnv(     # single process

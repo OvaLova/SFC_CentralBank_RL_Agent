@@ -170,7 +170,7 @@
 "V" = Wealth of households
 "V_fma" = Investible wealth of households
 "W" = Wage rate
-"WB" = Wage rate
+"WB" = Wage bill
 "Y" = Output at current prices (nominal GDP)
 "YD_hs" = Haig-Simons measure of disposable income
 "YD_r" = Regular disposable income

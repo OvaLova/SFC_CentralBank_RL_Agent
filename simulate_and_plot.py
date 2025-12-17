@@ -4,12 +4,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from gym_environment import SFCEnv, pi_target, threshold
 from train_agent import model_name, loss
 from model_matrices import balance_sheet_map, state 
+import pandas as pd
 
 
 print(f"========== SIMULATION of: {model_name} ==========")
 # Initialize environment (single instance for simulation)
 base_env = SFCEnv(
-    T=200,
+    T=100,
     eq_file="equations_zezza.txt",
     init_state=state,
     balance_sheet_map=balance_sheet_map,
@@ -31,9 +32,13 @@ policy_actions = []
 growth = []
 timesteps = list(range(base_env.T))
 
+# Storage for analysis
+history = pd.DataFrame()
+
 # Run simulation
 obs = env.reset()
-for step in range(base_env.T):
+for t in range(base_env.T):
+    timestep = t+1
     action, _ = model.predict(obs, deterministic=True)
     obs, _, _, infos = env.step(action)
     
@@ -51,6 +56,14 @@ for step in range(base_env.T):
     interest_rates.append(current_interest)
     policy_actions.append(action_value)
     growth.append(current_growth)
+
+    # Store solution
+    row = {"t": timestep}
+    row.update(obs)
+    history = pd.concat([history, pd.DataFrame([row])], ignore_index=True)
+
+# Save history to CSV
+history.to_csv("history.csv", index=False)
 
 # Plotting
 plt.figure(figsize=(12, 12))
