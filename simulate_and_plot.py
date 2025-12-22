@@ -1,16 +1,17 @@
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from gym_environment import SFCEnv, pi_target, threshold
-from train_agent import model_name, loss
+from gym_environment import SFCEnv, pi_target, threshold_pi
+from train_agent import model_name, loss, T
 from model_matrices import balance_sheet_map, state 
 import pandas as pd
+import numpy as np
 
 
 print(f"========== SIMULATION of: {model_name} ==========")
 # Initialize environment (single instance for simulation)
 base_env = SFCEnv(
-    T=100,
+    T=T,
     eq_file="equations_zezza.txt",
     init_state=state,
     balance_sheet_map=balance_sheet_map,
@@ -25,13 +26,6 @@ env.norm_reward = False  # Don't normalize rewards for eval
 # Load model with normalized env
 model = PPO.load(model_name)
 
-# Storage for plotting
-inflation_rates = []
-interest_rates = []
-policy_actions = []
-growth = []
-timesteps = list(range(base_env.T))
-
 # Storage for analysis
 history = pd.DataFrame()
 
@@ -41,63 +35,61 @@ for t in range(base_env.T):
     timestep = t+1
     action, _ = model.predict(obs, deterministic=True)
     obs, _, _, infos = env.step(action)
+    obs = env.unnormalize_obs(obs)
     
-    # Extract info
-    # Access info from the first (and only) environment
-    current_info = infos[0]  # Get info dict for first env
-    current_inflation = current_info.get("π", 0)
-    current_interest = current_info.get("r_b_", 0)
-    current_growth = current_info.get("gdp_growth", 0)
     # Convert action to integer index
     action_idx = int(action[0])  # Convert numpy array to integer
     action_value = base_env.action_value_ranges["r_b_"][action_idx]
-    
-    inflation_rates.append(current_inflation)
-    interest_rates.append(current_interest)
-    policy_actions.append(action_value)
-    growth.append(current_growth)
 
     # Store solution
-    row = {"t": timestep}
-    row.update(obs)
-    history = pd.concat([history, pd.DataFrame([row])], ignore_index=True)
+    if timestep != base_env.T:
+        row = {"t": timestep}
+        row.update(dict(zip(base_env.observation_vars, obs.flatten())))
+        row.update({"action": action_value})
+        history = pd.concat([history, pd.DataFrame([row])], ignore_index=True)
 
 # Save history to CSV
-history.to_csv("history.csv", index=False)
+history.to_csv(f"history_{model_name}.csv", index=False)
 
 # Plotting
-plt.figure(figsize=(12, 12))
+history = pd.read_csv(f"history_{model_name}.csv")
+plt.figure(figsize=(8, 8))
+plt.suptitle(f"Model: {model_name}", fontsize=12)
 
 # Plot inflation and target
 plt.subplot(4, 1, 1)
-plt.plot(timesteps, inflation_rates, label='Actual Inflation', color='blue')
+plt.plot(history['t'], history['π_-1'], label='Inflation', color='blue')
 plt.axhline(y=pi_target, color='r', linestyle='--', label='Target Inflation')
-plt.fill_between(timesteps, 
-                 pi_target - threshold, 
-                 pi_target + threshold, 
-                 color='green', alpha=0.1, label=f'Target Zone (±{threshold:.3%})')
+plt.fill_between(history['t'], 
+                 pi_target - threshold_pi, 
+                 pi_target + threshold_pi, 
+                 color='green', alpha=0.1, label=f'Target Zone (±{threshold_pi:.3%})')
 plt.ylabel('Inflation Rate')
-plt.legend()
+plt.legend(loc='lower right')
 plt.grid(True)
 
 # Plot growth
 plt.subplot(4, 1, 2)
-plt.plot(timesteps, growth, label='GDP Growth', color='purple')
-plt.ylabel('GDP')
+gdp = np.array(history['y_-1'])
+initial_gdp = base_env.init_state['y_-1']
+gdp_prev = np.concatenate(([initial_gdp], gdp[:-1]))
+growth = list(1 - gdp_prev/gdp)
+plt.plot(history['t'], growth, label='Growth', color='purple')
+plt.ylabel('Real GDP Growth')
 plt.legend()
 plt.grid(True)
 
 # Plot interest rates
 plt.subplot(4, 1, 3)
-plt.plot(timesteps, interest_rates, label='Policy Rate', color='red')
-plt.ylabel('Interest Rate')
+plt.plot(history['t'], history['r_b-1'], label='Policy Rate', color='red')
+plt.ylabel('Interest Rate for Bills')
 plt.legend()
 plt.grid(True)
 
 # Plot policy actions
 plt.subplot(4, 1, 4)
-plt.step(timesteps, policy_actions, label='Policy Action', color='orange', where='post')
-plt.scatter(timesteps, policy_actions, 
+plt.step(history['t'], history['action'], label='Policy Action', color='orange', where='post')
+plt.scatter(history['t'], history['action'], 
             color='darkorange', 
             zorder=3,
             s=15)     

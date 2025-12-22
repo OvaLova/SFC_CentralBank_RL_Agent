@@ -36,7 +36,7 @@ def visualize_dependency_graph(G, sccs, title="Dependency Graph", filename="depe
     # pos = hierarchical_layout(G)
     pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
     nx.draw(G, pos, with_labels=True, node_color=node_colors, edge_color='gray',
-            node_size=300, font_size=3, font_weight='bold', arrowsize=15)
+            node_size=300, font_size=5, font_weight='bold', arrowsize=15)
     plt.title(title)
     plt.tight_layout()
     plt.savefig(filename)
@@ -61,7 +61,7 @@ def visualize_condensation_graph(cond_graph, sccs, title="Condensation Graph", f
     pos = nx.nx_agraph.graphviz_layout(cond_graph, prog="dot")
     nx.draw(cond_graph, pos, with_labels=True, labels=label_map,
             node_color=node_colors, edge_color='gray',
-            node_size=300, font_size=3, font_weight='bold', arrowsize=15)
+            node_size=300, font_size=4, font_weight='bold', arrowsize=15)
     plt.title(title)
     plt.tight_layout()
     plt.savefig(filename)

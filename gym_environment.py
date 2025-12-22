@@ -60,10 +60,10 @@ class SFCEnv(gym.Env):
         self.action_space = spaces.MultiDiscrete([len(self.action_value_ranges[var]) for var in self.action_vars])
         all_vars = list(self.state.keys())
         vars_to_exculde = [var for var in self.state 
-                        if not var.endswith('_-1') and not var.endswith('-1')    # exclude parameters
-                        and '^T' not in var    # exclude targets
-                        and '^e' not in var    # exclude expectations
-                        ]  
+                if not var.endswith('-1')    # exclude parameters
+                or '^T' in var    # exclude targets
+                or '^e' in var    # exclude expectations
+                ]  
         self.observation_vars = [var for var in all_vars if var not in vars_to_exculde]
         self.observation_space = spaces.Box(
             low=-1e2, high=1e12, shape=(len(self.observation_vars),), dtype=np.float32
@@ -138,12 +138,7 @@ class SFCEnv(gym.Env):
 
         truncated = self.t >= self.T
         terminated = False  # No terminal state
-        info = {
-            "π": self.state["π_-1"],
-            "u": self.state["u_-1"],
-            "r_b_": self.state["r_b_"],
-            "gdp_growth": self.state.get("y_-1", 0.0) / prev_y
-        }
+        info = {}
         return self._get_obs(), reward, terminated, truncated, info
 
     def _get_obs(self):
@@ -152,8 +147,8 @@ class SFCEnv(gym.Env):
     def _compute_reward(self, prev_rate, prev_y):
         # Extract key indicators from state
         inflation = self.state.get("π_-1", 0.0)
-        capacity_util = self.state.get("u_-1", 0.0)
-        gdp_growth = self.state.get("y_-1", 0.0) / prev_y
+        # capacity_util = self.state.get("u_-1", 0.0)
+        # gdp_growth = self.state.get("y_-1", 0.0) / prev_y
 
         if self.loss == "quadratic":
             # Quadratic penalty for deviation (penalizes any deviation)

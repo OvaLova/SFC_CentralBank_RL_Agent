@@ -18,7 +18,7 @@ if multiprocess:
     process = "multiprocess"
 else:
     process = "singleprocess"
-loss = "piecewise"
+loss = "quadratic"
 model_name = f"OptimalPolicy_{loss}"
 
 def train(multiprocess=False):
@@ -107,5 +107,5 @@ def make_env():
 
 
 if __name__ == "__main__":
-    train(multiprocess=multiprocess)
-    # resume_training(multiprocess=multiprocess)
+    # train(multiprocess=multiprocess)
+    resume_training(multiprocess=multiprocess)
