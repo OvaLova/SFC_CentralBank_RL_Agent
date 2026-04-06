@@ -1,6 +1,5 @@
 import pandas as pd
 import re
-import numpy as np
 
 
 balance_sheet_map = {
@@ -261,3 +260,9 @@ def check_matrix_consistency(matrix, tol=1e-4, verbose=False):
         'wealth_discrepancy': wealth_discrepancy,
     }
     return result, differences
+
+# Test
+matrix = build_matrix(balance_sheet_map, state)
+result, differences = check_matrix_consistency(matrix, tol=1e-4, verbose=True)
+print(result)
+print(differences)

@@ -3,4 +3,6 @@
 *.csv
 *.pkl
 *.zip
+!EfectulFisherMAIN.zip
+!PrezentareMAIN.zip
 ppo_logs/
